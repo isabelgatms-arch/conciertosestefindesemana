@@ -319,6 +319,20 @@ def main():
 
     weekend_events = filter_for_this_weekend(all_events, friday, saturday)
 
+
+    dance_events = []
+for e in weekend_events:
+    # “bailable” lo decidimos por título + texto cercano
+    if is_danceable(f"{e.title} {e.raw_genre_text}"):
+        dance_events.append(e)
+
+dance_events.sort(key=lambda e: (e.event_date, e.event_time or "99:99", e.venue, e.title))
+
+print(f"Eventos viernes/sábado 'bailables': {len(dance_events)}")
+for e in dance_events[:30]:
+    print(f"- {e.event_date} {e.event_time or ''} | {e.venue} | {e.title} | {e.url}")
+
+    
     # De momento solo mostramos (aún no scrapeamos, así que saldrá vacío)
     print(f"Eventos viernes/sábado encontrados: {len(weekend_events)}")
 
