@@ -1,3 +1,8 @@
+import re
+from bs4 import BeautifulSoup
+from dateutil.parser import parse as dtparse
+
+
 import os
 import sys
 from dataclasses import dataclass
@@ -100,6 +105,65 @@ def fetch_html(url: str, timeout: int = 30) -> str:
     r.raise_for_status()
     return r.text
 
+SPANISH_MONTHS = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+    # abreviaturas típicas
+    "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+    "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12,
+}
+
+def parse_spanish_date_str(s: str) -> Optional[date]:
+    """
+    Acepta strings tipo:
+      - '29 enero'
+      - '30 de enero de 2026'
+      - '28 ene'
+    Devuelve date o None.
+    """
+    if not s:
+        return None
+    t = s.strip().lower()
+
+    # 30 de enero de 2026
+    m = re.search(r"\b(\d{1,2})\s+de\s+([a-záéíóú]+)\s+de\s+(\d{4})\b", t)
+    if m:
+        d = int(m.group(1))
+        mon = SPANISH_MONTHS.get(m.group(2).replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u"))
+        y = int(m.group(3))
+        if mon:
+            return date(y, mon, d)
+
+    # 29 enero  (sin año)
+    m = re.search(r"\b(\d{1,2})\s+([a-záéíóú]{3,})\b", t)
+    if m:
+        d = int(m.group(1))
+        mon_key = m.group(2)
+        mon_key = mon_key.replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u")
+        mon = SPANISH_MONTHS.get(mon_key)
+        if mon:
+            # año “probable”: lo decide el caller comparando con 'today'
+            return date(1900, mon, d)  # año placeholder
+    return None
+
+
+def attach_year(d: date, today_madrid: date) -> date:
+    """
+    Si la fecha venía sin año (1900), asigna el año correcto.
+    Estrategia: si mes/día ya pasó “mucho” respecto a hoy, asumimos año siguiente.
+    (Para nuestro caso semanal funciona bien.)
+    """
+    if d.year != 1900:
+        return d
+    y = today_madrid.year
+    candidate = date(y, d.month, d.day)
+    # Si hoy es diciembre y candidate es enero, debe ser año siguiente
+    if (today_madrid.month == 12 and candidate.month == 1):
+        return date(y + 1, d.month, d.day)
+    # Si hoy es enero y candidate es diciembre, debe ser año anterior (no nos interesa)
+    return candidate
+
+
 
 # ---------- “Parsers” por fuente (aún vacíos) ----------
 def parse_events_from_teatro_del_barrio(html: str, source: VenueSource) -> List[Event]:
@@ -111,10 +175,62 @@ def parse_events_from_teatro_del_barrio(html: str, source: VenueSource) -> List[
 
 
 def parse_events_from_tempo_club(html: str, source: VenueSource) -> List[Event]:
-    """
-    TODO: implementar scraping real.
-    """
-    return []
+    soup = BeautifulSoup(html, "lxml")
+    text_lines = [ln.strip() for ln in soup.get_text("\n").splitlines() if ln.strip()]
+
+    # Patrón visible: "29 enero | 21:00" y justo después el título
+    # Ejemplo en la página: :contentReference[oaicite:2]{index=2}
+    events: List[Event] = []
+    i = 0
+
+    # Links de "+ info": los usamos para sacar URL del evento en orden
+    info_links = []
+    for a in soup.select("a"):
+        label = (a.get_text(" ", strip=True) or "").lower()
+        href = a.get("href") or ""
+        if "+ info" in label and href:
+            info_links.append(href)
+
+    info_idx = 0
+
+    while i < len(text_lines):
+        ln = text_lines[i].lower()
+
+        m = re.match(r"^(\d{1,2})\s+([a-záéíóú]+)\s*\|\s*([0-2]?\d:\d{2})$", ln)
+        if m and i + 1 < len(text_lines):
+            day = int(m.group(1))
+            mon = m.group(2)
+            hhmm = m.group(3)
+
+            d0 = parse_spanish_date_str(f"{day} {mon}")
+            if d0:
+                # año real se asignará en main con hoy Madrid: aquí ponemos año placeholder 1900 y luego corregimos fuera,
+                # pero como Event exige date real, la corregimos en caliente con 'datetime.now' Madrid:
+                today_madrid = datetime.now(tz=tz.gettz("Europe/Madrid")).date()
+                d = attach_year(d0, today_madrid)
+
+                title = text_lines[i + 1].strip()
+                url = info_links[info_idx] if info_idx < len(info_links) else source.url
+                if info_idx < len(info_links):
+                    info_idx += 1
+
+                events.append(
+                    Event(
+                        title=title,
+                        venue=source.name,
+                        event_date=d,
+                        event_time=hhmm,
+                        url=url,
+                        source_url=source.url,
+                        raw_genre_text=title,
+                    )
+                )
+            i += 2
+            continue
+
+        i += 1
+
+    return events
 
 
 def parse_events_from_cafe_berlin(html: str, source: VenueSource) -> List[Event]:
