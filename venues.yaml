@@ -1,0 +1,24 @@
+venues:
+  - name: "Teatro del Barrio"
+    city: "Madrid"
+    url: "https://teatrodelbarrio.com/programacion/"
+    type: "html"
+    notes: "Agenda semanal, mezcla teatro y música"
+
+  - name: "Tempo Club"
+    city: "Madrid"
+    url: "https://tempoclub.es/conciertos/"
+    type: "html"
+    notes: "Muy buena fuente de funk, soul y música bailable"
+
+  - name: "Café Berlín"
+    city: "Madrid"
+    url: "https://cafeberlinentradas.com/es"
+    type: "html"
+    notes: "Jazz, soul, funk, latin, sesiones bailables"
+
+  - name: "Sala La Riviera"
+    city: "Madrid"
+    url: "https://salariviera.com/conciertossalariviera/"
+    type: "html"
+    notes: "Conciertos grandes y fiestas bailables"
