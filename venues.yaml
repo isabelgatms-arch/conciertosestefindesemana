@@ -1,10 +1,10 @@
 venues:
   - name: "Teatro del Barrio"
     city: "Madrid"
-    url: "https://teatrodelbarrio.com/programacion/"
+    url: "https://teatrodelbarrio.com/calendario/"
     type: "html"
-    notes: "Agenda semanal, mezcla teatro y música"
-
+    notes: "Calendario mensual (más scrapeable que /programacion/)"
+    
   - name: "Tempo Club"
     city: "Madrid"
     url: "https://tempoclub.es/conciertos/"
